@@ -43,6 +43,7 @@ jobs:
       - name: Run Config Drift Check
         id: drift
         run: |
+          set -o pipefail
           python .drift-tool/main.py \
             --source app/ \
             --config config/ \
