@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weather-app
+  labels:
+    app: weather-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: weather-app
+  template:
+    metadata:
+      labels:
+        app: weather-app
+    spec:
+      containers:
+        - name: weather-app
+          image: weather-app:latest
+          ports:
+            - containerPort: 5000
+          env:
+            - name: OPENWEATHER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: api-key
+            - name: PORT
+              value: "5000"
+            - name: REDIS_URL
+              value: "redis://redis-service:6379"
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: database-url
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: db-user
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: db-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: jwt-secret
+            - name: RATE_LIMIT_PER_HOUR
+              value: "100"
