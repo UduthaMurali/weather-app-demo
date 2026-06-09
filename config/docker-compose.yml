@@ -16,6 +16,15 @@ services:
       - DB_PASSWORD
       - JWT_SECRET
       - RATE_LIMIT_PER_HOUR
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASSWORD
+      - SLACK_WEBHOOK_URL
+      - SENTRY_DSN
+      - ALERT_THRESHOLD_CELSIUS
+      - WEATHER_UNITS
+      - FORECAST_DAYS
     depends_on:
       - redis
       - db

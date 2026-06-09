@@ -53,3 +53,36 @@ spec:
                   key: jwt-secret
             - name: RATE_LIMIT_PER_HOUR
               value: "100"
+            - name: SMTP_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: smtp-host
+            - name: SMTP_PORT
+              value: "587"
+            - name: SMTP_USER
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: smtp-user
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: smtp-password
+            - name: SLACK_WEBHOOK_URL
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: slack-webhook-url
+            - name: SENTRY_DSN
+              valueFrom:
+                secretKeyRef:
+                  name: weather-secrets
+                  key: sentry-dsn
+            - name: ALERT_THRESHOLD_CELSIUS
+              value: "35"
+            - name: WEATHER_UNITS
+              value: "metric"
+            - name: FORECAST_DAYS
+              value: "7"
