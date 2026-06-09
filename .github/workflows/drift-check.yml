@@ -16,6 +16,10 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   drift-check:
     name: Detect Config Drift
@@ -68,7 +72,7 @@ jobs:
 
             const level = report.drift_level || 'UNKNOWN';
             const score = report.drift_score || 0;
-            const items = report.drift_items || [];
+            const items = report.missing_in_config || [];
 
             const emoji = {
               NONE: '✅', LOW: '⚠️', MEDIUM: '🟠', HIGH: '🔴'
