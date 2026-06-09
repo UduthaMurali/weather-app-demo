@@ -1,26 +1,36 @@
 """
-Weather App — v2 (Medium Drift)
-Developer adds Save to Favorites feature (PostgreSQL + JWT).
-New env vars: DATABASE_URL, DB_USER, DB_PASSWORD, JWT_SECRET (all critical — no defaults)
-              RATE_LIMIT_PER_HOUR (warning — has default)
-UI: ★ Save button in card — clicking it shows DB error because DATABASE_URL not in deployment config.
+Weather App — v3 (Large Drift)
+Developer adds weather alert subscription (email + Slack + Sentry monitoring).
+New env vars: SMTP_HOST, SMTP_USER, SMTP_PASSWORD, SLACK_WEBHOOK_URL, SENTRY_DSN (all critical)
+              ALERT_THRESHOLD_CELSIUS, WEATHER_UNITS, FORECAST_DAYS (warnings)
+UI: 🔔 Alert button in card — clicking shows inline email form.
+    Subscribing fails with "Email service not configured" because SMTP vars missing from deployment.
 Pipeline: BLOCKS (critical drift).
 """
-import os, logging, json
+import os, logging
 from flask import Flask, jsonify, request, render_template_string
 import requests
 
 app = Flask(__name__)
 
-API_KEY             = os.getenv("OPENWEATHER_API_KEY")
-PORT                = int(os.getenv("PORT", "5000"))
-REDIS_URL           = os.getenv("REDIS_URL", "redis://localhost:6379")
-LOG_LEVEL           = os.getenv("LOG_LEVEL", "INFO")
-DATABASE_URL        = os.getenv("DATABASE_URL")          # ❌ critical — no default
-DB_USER             = os.getenv("DB_USER")               # ❌ critical — no default
-DB_PASSWORD         = os.getenv("DB_PASSWORD")           # ❌ critical — no default
-JWT_SECRET          = os.getenv("JWT_SECRET")            # ❌ critical — no default
-RATE_LIMIT_PER_HOUR = os.getenv("RATE_LIMIT_PER_HOUR", "100")  # ⚠️ warning
+API_KEY                 = os.getenv("OPENWEATHER_API_KEY")
+PORT                    = int(os.getenv("PORT", "5000"))
+REDIS_URL               = os.getenv("REDIS_URL", "redis://localhost:6379")
+LOG_LEVEL               = os.getenv("LOG_LEVEL", "INFO")
+DATABASE_URL            = os.getenv("DATABASE_URL")
+DB_USER                 = os.getenv("DB_USER")
+DB_PASSWORD             = os.getenv("DB_PASSWORD")
+JWT_SECRET              = os.getenv("JWT_SECRET")
+RATE_LIMIT_PER_HOUR     = os.getenv("RATE_LIMIT_PER_HOUR", "100")
+SMTP_HOST               = os.getenv("SMTP_HOST")                          # ❌ critical
+SMTP_PORT               = os.getenv("SMTP_PORT", "587")                   # ⚠️ warning
+SMTP_USER               = os.getenv("SMTP_USER")                          # ❌ critical
+SMTP_PASSWORD           = os.getenv("SMTP_PASSWORD")                      # ❌ critical
+SLACK_WEBHOOK_URL       = os.getenv("SLACK_WEBHOOK_URL")                  # ❌ critical
+ALERT_THRESHOLD_CELSIUS = os.getenv("ALERT_THRESHOLD_CELSIUS", "35")      # ⚠️ warning
+SENTRY_DSN              = os.getenv("SENTRY_DSN")                         # ❌ critical
+WEATHER_UNITS           = os.getenv("WEATHER_UNITS", "metric")            # ⚠️ warning
+FORECAST_DAYS           = os.getenv("FORECAST_DAYS", "7")                 # ⚠️ warning
 
 logging.basicConfig(level=getattr(logging, LOG_LEVEL, logging.INFO))
 log = logging.getLogger(__name__)
@@ -86,15 +96,29 @@ HTML = """
     }
     .detail-item .label { font-size: 0.72rem; opacity: 0.55; text-transform: uppercase; letter-spacing: 1px; }
     .detail-item .value { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
-    .fav-btn {
-      width: 100%; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2);
-      background: rgba(255,255,255,0.08); color: #fff; font-size: 0.95rem;
-      cursor: pointer; transition: background 0.2s; margin-top: 8px;
+    .action-row { display: flex; gap: 10px; margin-top: 8px; }
+    .btn {
+      flex: 1; padding: 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(255,255,255,0.08); color: #fff; font-size: 0.9rem;
+      cursor: pointer; transition: background 0.2s;
     }
-    .fav-btn:hover { background: rgba(255,255,255,0.15); }
+    .btn:hover { background: rgba(255,255,255,0.15); }
+    .alert-form {
+      display: none; margin-top: 16px; text-align: left;
+      border-top: 1px solid rgba(255,255,255,0.1); padding-top: 16px;
+    }
+    .alert-form label { font-size: 0.75rem; opacity: 0.6; display: block; margin-bottom: 4px; margin-top: 12px; }
+    .alert-form input {
+      width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.15);
+      background: rgba(255,255,255,0.08); color: #fff; font-size: 0.9rem; outline: none;
+    }
+    .subscribe-btn {
+      width: 100%; margin-top: 14px; padding: 12px; border-radius: 12px; border: none;
+      background: #e94560; color: #fff; font-size: 0.95rem; cursor: pointer;
+    }
     .toast {
-      margin-top: 16px; padding: 12px 16px; border-radius: 10px;
-      font-size: 0.85rem; text-align: left; display: none;
+      margin-top: 14px; padding: 12px 16px; border-radius: 10px;
+      font-size: 0.85rem; display: none;
     }
     .toast.error   { background: rgba(233,69,96,0.2); border: 1px solid rgba(233,69,96,0.4); color: #ff8fa3; }
     .toast.success { background: rgba(0,200,120,0.2); border: 1px solid rgba(0,200,120,0.4); color: #00c878; }
@@ -137,31 +161,45 @@ HTML = """
           <div class="value">{{ wind }} m/s</div>
         </div>
       </div>
-      <button class="fav-btn" onclick="saveFavorite('{{ weather.name }}')">
-        ★ Save to Favorites
-      </button>
+      <div class="action-row">
+        <button class="btn" onclick="saveFavorite('{{ weather.name }}')">★ Favorite</button>
+        <button class="btn" onclick="toggleAlert()">🔔 Alert me</button>
+      </div>
+      <div class="alert-form" id="alertForm">
+        <label>Your email</label>
+        <input type="email" id="alertEmail" placeholder="you@example.com">
+        <label>Alert when temperature exceeds (°C)</label>
+        <input type="number" id="alertThreshold" value="{{ threshold }}" min="-20" max="60">
+        <button class="subscribe-btn" onclick="subscribeAlert('{{ weather.name }}')">Subscribe to Alerts</button>
+      </div>
       <div class="toast" id="toast"></div>
     </div>
   {% endif %}
   <script>
+    function showToast(msg, type) {
+      const t = document.getElementById('toast');
+      t.style.display = 'block';
+      t.className = 'toast ' + type;
+      t.textContent = (type === 'error' ? '❌ ' : '✅ ') + msg;
+    }
     function saveFavorite(city) {
-      fetch('/api/favorite', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({city: city})
-      })
-      .then(r => r.json())
-      .then(data => {
-        const t = document.getElementById('toast');
-        t.style.display = 'block';
-        if (data.error) {
-          t.className = 'toast error';
-          t.textContent = '❌ ' + data.error;
-        } else {
-          t.className = 'toast success';
-          t.textContent = '★ ' + city + ' saved to favorites!';
-        }
-      });
+      fetch('/api/favorite', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({city})})
+        .then(r => r.json())
+        .then(d => d.error ? showToast(d.error, 'error') : showToast(city + ' saved!', 'success'));
+    }
+    function toggleAlert() {
+      const f = document.getElementById('alertForm');
+      f.style.display = f.style.display === 'block' ? 'none' : 'block';
+    }
+    function subscribeAlert(city) {
+      const email = document.getElementById('alertEmail').value;
+      const threshold = document.getElementById('alertThreshold').value;
+      if (!email) { showToast('Please enter your email', 'error'); return; }
+      fetch('/api/subscribe-alert', {method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({city, email, threshold})})
+        .then(r => r.json())
+        .then(d => d.error ? showToast(d.error, 'error') : showToast('Alert set for ' + city, 'success'));
     }
   </script>
 </body>
@@ -173,37 +211,47 @@ def index():
     city = request.args.get("city", "").strip()
     if not city:
         return render_template_string(HTML, city=None, weather=None, error=None,
-                                      icon=None, temp=None, feels_like=None, wind=None)
+                                      icon=None, temp=None, feels_like=None,
+                                      wind=None, threshold=ALERT_THRESHOLD_CELSIUS)
     if not API_KEY:
         return render_template_string(HTML, city=city, weather=None,
                                       error="OPENWEATHER_API_KEY is not set.",
-                                      icon=None, temp=None, feels_like=None, wind=None)
+                                      icon=None, temp=None, feels_like=None,
+                                      wind=None, threshold=ALERT_THRESHOLD_CELSIUS)
     resp = requests.get(f"{BASE_URL}/weather",
-                        params={"q": city, "appid": API_KEY, "units": "metric"}, timeout=5)
+                        params={"q": city, "appid": API_KEY, "units": WEATHER_UNITS}, timeout=5)
     if resp.status_code == 404:
         return render_template_string(HTML, city=city, weather=None,
                                       error=f'City "{city}" not found.',
-                                      icon=None, temp=None, feels_like=None, wind=None)
+                                      icon=None, temp=None, feels_like=None,
+                                      wind=None, threshold=ALERT_THRESHOLD_CELSIUS)
     data       = resp.json()
     icon       = WEATHER_ICONS.get(data["weather"][0]["main"], "🌡️")
     temp       = round(data["main"]["temp"])
     feels_like = round(data["main"]["feels_like"])
     wind       = round(data["wind"]["speed"], 1)
     return render_template_string(HTML, city=city, weather=data, icon=icon,
-                                  temp=temp, feels_like=feels_like, wind=wind, error=None)
+                                  temp=temp, feels_like=feels_like, wind=wind,
+                                  threshold=ALERT_THRESHOLD_CELSIUS, error=None)
 
 @app.route("/api/favorite", methods=["POST"])
 def save_favorite():
     if not all([DATABASE_URL, DB_USER, DB_PASSWORD]):
-        return jsonify({"error": "Favorites unavailable — DATABASE_URL not configured in deployment config"}), 503
-    city = request.json.get("city")
-    # would save to DB here
-    return jsonify({"saved": city})
+        return jsonify({"error": "Favorites unavailable — DATABASE_URL not configured in deployment"}), 503
+    return jsonify({"saved": request.json.get("city")})
+
+@app.route("/api/subscribe-alert", methods=["POST"])
+def subscribe_alert():
+    if not all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
+        return jsonify({"error": "Alert service unavailable — SMTP_HOST, SMTP_USER, SMTP_PASSWORD not configured in deployment"}), 503
+    return jsonify({"subscribed": True})
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "version": "v2", "db": "configured" if DATABASE_URL else "missing"})
+    return jsonify({"status": "ok", "version": "v3",
+                    "db": "configured" if DATABASE_URL else "missing",
+                    "smtp": "configured" if SMTP_HOST else "missing"})
 
 if __name__ == "__main__":
-    print(f"\n  WeatherApp v2 running at http://localhost:{PORT}\n")
+    print(f"\n  WeatherApp v3 running at http://localhost:{PORT}\n")
     app.run(host="0.0.0.0", port=PORT, debug=True)
