@@ -1,11 +1,10 @@
-name: Config Drift Check
+﻿name: Config Drift Check
 
 on:
   push:
     branches:
       - main
       - 'feature/**'
-      - 'update/**'
   pull_request:
     branches:
       - main
@@ -60,33 +59,32 @@ jobs:
             const level = report.drift_level || 'UNKNOWN';
             const score = report.drift_score || 0;
             const items = report.missing_in_config || [];
-            const emoji = { NONE: '✅', LOW: '⚠️', MEDIUM: '🟠', HIGH: '🔴' }[level] || '❓';
-            let body = `## ${emoji} Config Drift Report\n\n`;
-            body += `**Drift Level:** \`${level}\`  |  **Drift Score:** ${score}\n\n`;
+            const emoji = { NONE: 'SUCCESS', LOW: 'WARNING', MEDIUM: 'BLOCKED', HIGH: 'BLOCKED' }[level] || 'UNKNOWN';
+            let body = ## Config Drift Report - \n\n;
+            body += **Drift Level:** \${level}\  |  **Drift Score:** \n\n;
             if (items.length === 0) {
-              body += `All environment variables referenced in code are declared in deployment config.\n`;
-              body += `No drift detected — safe to merge! ✅\n`;
+              body += All environment variables are declared in deployment config.\nNo drift detected - safe to merge!\n;
             } else {
               const critical = items.filter(i => i.severity === 'critical');
               const warnings = items.filter(i => i.severity === 'warning');
               if (critical.length > 0) {
-                body += `### 🔴 Critical — ${critical.length} variable(s) have NO default value\n`;
-                body += `> App will **crash or behave incorrectly** if deployed without these.\n\n`;
-                body += `| Variable | File | Line | Method |\n|---|---|---|---|\n`;
+                body += ### CRITICAL -  variable(s) have NO default value\n;
+                body += App will crash if deployed without these.\n\n;
+                body += | Variable | File | Line |\n|---|---|---|\n;
                 for (const item of critical) {
-                  body += `| \`${item.variable}\` | \`${item.file}\` | ${item.line} | ${item.method} |\n`;
+                  body += | \${item.variable}\ | \${item.file}\ |  |\n;
                 }
-                body += `\n`;
+                body += \n;
               }
               if (warnings.length > 0) {
-                body += `### ⚠️ Warning — ${warnings.length} variable(s) have a default but are not declared in config\n\n`;
-                body += `| Variable | File | Line | Method |\n|---|---|---|---|\n`;
+                body += ### WARNING -  variable(s) have a default but are not declared in config\n\n;
+                body += | Variable | File | Line |\n|---|---|---|\n;
                 for (const item of warnings) {
-                  body += `| \`${item.variable}\` | \`${item.file}\` | ${item.line} | ${item.method} |\n`;
+                  body += | \${item.variable}\ | \${item.file}\ |  |\n;
                 }
-                body += `\n`;
+                body += \n;
               }
-              body += `---\n**Fix:** Add the missing variables to your deployment config before merging.\n`;
+              body += ---\nAdd the missing variables to your deployment config before merging.\n;
             }
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -98,6 +96,6 @@ jobs:
       - name: Block PR on critical drift
         if: steps.drift.outcome == 'failure'
         run: |
-          echo "❌ CRITICAL CONFIG DRIFT DETECTED"
+          echo "CRITICAL CONFIG DRIFT DETECTED"
           echo "Add missing variables to deployment config before merging."
           exit 1
