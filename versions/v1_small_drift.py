@@ -7,7 +7,7 @@ load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'conf
 app = Flask(__name__)
 API_KEY   = os.getenv('OPENWEATHER_API_KEY', '7a8c5e266aab89f1ba50a75c4c1b56af')
 PORT      = int(os.getenv('PORT', '5000'))
-REDIS_URL = os.getenv('REDIS_URL')            # no default â†’ CRITICAL drift
+REDIS_URL = os.getenv(‘REDIS_URL’, ‘redis://localhost:6379’)  # has default â†’ WARNING drift
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')    # has default â†’ WARNING drift
 BASE_URL  = 'https://api.openweathermap.org/data/2.5'
 
