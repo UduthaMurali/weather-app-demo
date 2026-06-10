@@ -60,31 +60,31 @@ jobs:
             const score = report.drift_score || 0;
             const items = report.missing_in_config || [];
             const emoji = { NONE: 'SUCCESS', LOW: 'WARNING', MEDIUM: 'BLOCKED', HIGH: 'BLOCKED' }[level] || 'UNKNOWN';
-            let body = ## Config Drift Report - \n\n;
-            body += **Drift Level:** \${level}\  |  **Drift Score:** \n\n;
+            let body = `## Config Drift Report - ${emoji}\n\n`;
+            body += `**Drift Level:** ${level}  |  **Drift Score:** ${score}\n\n`;
             if (items.length === 0) {
-              body += All environment variables are declared in deployment config.\nNo drift detected - safe to merge!\n;
+              body += `All environment variables are declared in deployment config.\nNo drift detected - safe to merge!\n`;
             } else {
               const critical = items.filter(i => i.severity === 'critical');
               const warnings = items.filter(i => i.severity === 'warning');
               if (critical.length > 0) {
-                body += ### CRITICAL -  variable(s) have NO default value\n;
-                body += App will crash if deployed without these.\n\n;
-                body += | Variable | File | Line |\n|---|---|---|\n;
+                body += `### CRITICAL - ${critical.length} variable(s) have NO default value\n`;
+                body += `App will crash if deployed without these.\n\n`;
+                body += `| Variable | File | Line |\n|---|---|---|\n`;
                 for (const item of critical) {
-                  body += | \${item.variable}\ | \${item.file}\ |  |\n;
+                  body += `| ${item.variable} | ${item.file} | ${item.line || '-'} |\n`;
                 }
-                body += \n;
+                body += `\n`;
               }
               if (warnings.length > 0) {
-                body += ### WARNING -  variable(s) have a default but are not declared in config\n\n;
-                body += | Variable | File | Line |\n|---|---|---|\n;
+                body += `### WARNING - ${warnings.length} variable(s) have a default but are not declared in config\n\n`;
+                body += `| Variable | File | Line |\n|---|---|---|\n`;
                 for (const item of warnings) {
-                  body += | \${item.variable}\ | \${item.file}\ |  |\n;
+                  body += `| ${item.variable} | ${item.file} | ${item.line || '-'} |\n`;
                 }
-                body += \n;
+                body += `\n`;
               }
-              body += ---\nAdd the missing variables to your deployment config before merging.\n;
+              body += `---\nAdd the missing variables to your deployment config before merging.\n`;
             }
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
