@@ -5,9 +5,11 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config', '.env'))
 
 app = Flask(__name__)
-API_KEY  = os.getenv('OPENWEATHER_API_KEY', '7a8c5e266aab89f1ba50a75c4c1b56af')
-PORT     = int(os.getenv('PORT', '5000'))
-BASE_URL = 'https://api.openweathermap.org/data/2.5'
+API_KEY   = os.getenv('OPENWEATHER_API_KEY', '7a8c5e266aab89f1ba50a75c4c1b56af')
+PORT      = int(os.getenv('PORT', '5000'))
+REDIS_URL = os.getenv(‘REDIS_URL’, ‘redis://localhost:6379’)  # has default â†’ WARNING drift
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')    # has default â†’ WARNING drift
+BASE_URL  = 'https://api.openweathermap.org/data/2.5'
 
 CSS = """
 *{margin:0;padding:0;box-sizing:border-box}
@@ -25,6 +27,7 @@ body{font-family:'Segoe UI',sans-serif;background:linear-gradient(135deg,#1a1a2e
 .detail .label{font-size:.7rem;opacity:.6;letter-spacing:1px;text-transform:uppercase}
 .detail .value{font-size:1.1rem;font-weight:600;margin-top:.2rem}
 .error{max-width:520px;margin:0 auto;background:rgba(220,38,38,.15);border:1px solid rgba(220,38,38,.4);border-radius:16px;padding:1.5rem;text-align:center;color:#f87171}
+.cache-bar{max-width:520px;margin:0 auto .75rem;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);border-radius:10px;padding:.5rem 1rem;font-size:.82rem;color:#86efac;text-align:center}
 """
 
 HTML = """<!DOCTYPE html>
@@ -39,6 +42,7 @@ HTML = """<!DOCTYPE html>
 </div>
 {% if error %}<div class="error">{{ error }}</div>{% endif %}
 {% if weather %}
+<div class="cache-bar">&#9889; Redis cache enabled &mdash; faster responses</div>
 <div class="card">
   <div class="city">{{ weather.name }}</div>
   <div class="country">{{ weather.sys.country }}</div>
