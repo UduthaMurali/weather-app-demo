@@ -1,4 +1,4 @@
-﻿import os
+import os
 from flask import Flask, request, render_template_string
 import requests
 from dotenv import load_dotenv
